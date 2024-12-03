@@ -480,11 +480,17 @@ static const struct snd_kcontrol_new max98088_snd_controls[] = {
        SOC_SINGLE("INA Volume", M98088_REG_37_LVL_INA, 0, 7, 1),
        SOC_SINGLE("INB Volume", M98088_REG_38_LVL_INB, 0, 7, 1),
 
+       SOC_SINGLE("DACL Volume", M98088_REG_2F_LVL_DAI1_PLAY, 0, 15, 1),
+       SOC_SINGLE("DACR Volume", M98088_REG_31_LVL_DAI2_PLAY, 0, 15, 1),
+
        SOC_SINGLE("ADCL Volume", M98088_REG_33_LVL_ADC_L, 0, 15, 0),
        SOC_SINGLE("ADCR Volume", M98088_REG_34_LVL_ADC_R, 0, 15, 0),
 
        SOC_SINGLE("ADCL Boost Volume", M98088_REG_33_LVL_ADC_L, 4, 3, 0),
        SOC_SINGLE("ADCR Boost Volume", M98088_REG_34_LVL_ADC_R, 4, 3, 0),
+
+       SOC_SINGLE("Left HP Output Mixer Switch", M98088_REG_27_MIX_HP_CNTL, 4, 1, 0),
+       SOC_SINGLE("Right HP Output Mixer Switch", M98088_REG_27_MIX_HP_CNTL, 5, 1, 0),
 
        SOC_SINGLE("EQ1 Switch", M98088_REG_49_CFG_LEVEL, 0, 1, 0),
        SOC_SINGLE("EQ2 Switch", M98088_REG_49_CFG_LEVEL, 1, 1, 0),
