@@ -370,7 +370,7 @@ static void sngl_calib_start(struct tasdevice_priv *tas_priv, int i,
 			tasdevice_dev_read(tas_priv, i, p[j].reg,
 				(int *)&p[j].val[0]);
 		} else {
-			switch (p[j].reg) {
+			switch (tas2781_cali_start_reg[j].reg) {
 			case 0: {
 				if (!reg[0])
 					continue;
@@ -1645,7 +1645,6 @@ static void tasdevice_parse_dt(struct tasdevice_priv *tas_priv)
 
 static int tasdevice_i2c_probe(struct i2c_client *i2c)
 {
-	const struct i2c_device_id *id = i2c_match_id(tasdevice_id, i2c);
 	const struct acpi_device_id *acpi_id;
 	struct tasdevice_priv *tas_priv;
 	int ret;
@@ -1667,7 +1666,7 @@ static int tasdevice_i2c_probe(struct i2c_client *i2c)
 		tas_priv->chip_id = acpi_id->driver_data;
 		tas_priv->isacpi = true;
 	} else {
-		tas_priv->chip_id = id ? id->driver_data : 0;
+		tas_priv->chip_id = (uintptr_t)i2c_get_match_data(i2c);
 		tas_priv->isacpi = false;
 	}
 
@@ -1728,4 +1727,4 @@ MODULE_AUTHOR("Shenghao Ding <shenghao-ding@ti.com>");
 MODULE_AUTHOR("Kevin Lu <kevin-lu@ti.com>");
 MODULE_DESCRIPTION("ASoC TAS2781 Driver");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS(SND_SOC_TAS2781_FMWLIB);
+MODULE_IMPORT_NS("SND_SOC_TAS2781_FMWLIB");
