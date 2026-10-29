@@ -10,6 +10,8 @@
 #include <linux/module.h>
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_type.h>
+#include <sound/pcm_params.h>
+#include <sound/sdw.h>
 #include <sound/sdca_function.h>
 #include <sound/soc_sdw_utils.h>
 
@@ -2030,6 +2032,217 @@ void asoc_sdw_shutdown(struct snd_pcm_substream *substream)
 	sdw_shutdown_stream(substream);
 }
 EXPORT_SYMBOL_NS(asoc_sdw_shutdown, "SND_SOC_SDW_UTILS");
+
+int asoc_sdw_comp_amp_probe(struct snd_soc_dai *dai)
+{
+	void *data = dev_get_drvdata(dai->dev);
+
+	dev_dbg(dai->dev, "%s %s id %d", __func__, dai->name, dai->id);
+
+	snd_soc_dai_set_drvdata(dai, data);
+
+	return 0;
+}
+EXPORT_SYMBOL_NS(asoc_sdw_comp_amp_probe, "SND_SOC_SDW_UTILS");
+
+void *asoc_sdw_comp_amp_get_sdw_stream(struct snd_soc_dai *dai, int direction)
+{
+	void *data = snd_soc_dai_get_drvdata(dai);
+
+	dev_dbg(dai->dev, "%s %s id %d direction %d", __func__, dai->name, dai->id, direction);
+
+	if (data)
+		return dai->stream[direction].dma_data;
+	else
+		return ERR_PTR(-EINVAL);
+}
+EXPORT_SYMBOL_NS(asoc_sdw_comp_amp_get_sdw_stream, "SND_SOC_SDW_UTILS");
+
+int asoc_sdw_comp_amp_startup(struct snd_pcm_substream *substream, struct snd_soc_dai *dai)
+{
+	dev_dbg(dai->dev, "%s %s id %d", __func__, dai->name, dai->id);
+	dev_dbg(dai->dev, "%s substream stream %d", __func__, substream->stream);
+
+	dump_stack();
+
+	return sdw_startup_stream(substream);
+}
+EXPORT_SYMBOL_NS(asoc_sdw_comp_amp_startup, "SND_SOC_SDW_UTILS");
+
+int asoc_sdw_comp_amp_hw_params(struct snd_pcm_substream *substream,
+	struct snd_pcm_hw_params *params, struct snd_soc_dai *dai)
+{
+	struct sdw_slave *slave = dev_to_sdw_dev(dai->dev);
+	struct snd_soc_dai *slave_dai = NULL, *tmp_dai;
+	struct sdw_stream_runtime *sdw_stream = NULL;
+	struct sdw_stream_config sconfig;
+	struct sdw_port_config pconfig;
+	int retval;
+
+	dev_err(dai->dev, "bard: %s %s id %d", __func__, dai->name, dai->id);
+	dev_dbg(dai->dev, "%s substream stream %d", __func__, substream->stream);
+
+	sdw_stream = snd_soc_dai_get_dma_data(dai, substream);
+	if (!sdw_stream)
+		return -EINVAL;
+	printk("%s, sdw_stream 0x%p\n", __func__, sdw_stream);
+
+	snd_sdw_params_to_config(substream, params, &sconfig, &pconfig);
+
+	////sconfig.direction = SDW_DATA_DIR_TX; // playback
+	//sconfig.direction = SDW_DATA_DIR_RX; // capture
+	//sconfig.ch_count = 2;
+	//sconfig.frame_rate = params_rate(params);
+	//sconfig.bps = snd_pcm_format_width(params_format(params));
+	//pconfig.ch_mask = BIT(0) | BIT(1);
+	sconfig.type = SDW_STREAM_COMPANION;// sdw_stream->type;
+	pconfig.num = 6;
+
+	retval = sdw_stream_add_master(slave->bus, &sconfig, &pconfig, 1, sdw_stream);
+	if (retval) {
+		dev_err(dai->dev, "%s: Unable to add master, ret=%d\n", __func__, retval);
+		return retval;
+	}
+	printk("%s, master sdw_stream 0x%p\n", __func__, sdw_stream);
+
+	snd_soc_dai_set_stream(dai, sdw_stream, SNDRV_PCM_STREAM_PLAYBACK);
+	snd_soc_dai_set_stream(dai, sdw_stream, SNDRV_PCM_STREAM_CAPTURE);
+
+	for_each_component_dais(dai->component, tmp_dai) {
+		if (!strcmp(tmp_dai->name, "rt1320-aif1"))
+			slave_dai = tmp_dai;
+	}
+
+	if (!slave_dai) {
+		dev_err(dai->dev, "%s: Unable to find slave dai %s\n", __func__, "rt1320-aif1");
+		return -EINVAL;
+	}
+
+	return slave_dai->driver->ops->hw_params(substream, params, dai);
+}
+EXPORT_SYMBOL_NS(asoc_sdw_comp_amp_hw_params, "SND_SOC_SDW_UTILS");
+
+int asoc_sdw_comp_amp_prepare(struct snd_pcm_substream *substream, struct snd_soc_dai *dai)
+{
+	//struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct sdw_stream_runtime *sdw_stream;
+	//struct snd_soc_dai *dai;
+	int ret;
+
+	dev_dbg(dai->dev, "%s %s id %d", __func__, dai->name, dai->id);
+	dev_dbg(dai->dev, "%s substream stream %d", __func__, substream->stream);
+
+	/* Find stream from first CPU DAI */
+	//dai = snd_soc_rtd_to_cpu(rtd, 0);
+
+	sdw_stream = snd_soc_dai_get_stream(dai, substream->stream);
+	//sdw_stream = snd_soc_dai_get_dma_data(dai, substream);
+	if (IS_ERR(sdw_stream)) {
+		dev_err(dai->dev, "%s no stream found for DAI %s id %d\n", __func__, dai->name, dai->id);
+		return PTR_ERR(sdw_stream);
+	}
+
+	ret = sdw_prepare_stream(sdw_stream);
+	if (ret)
+		dev_err(dai->dev, "%s prepare failed: %d\n", __func__, ret);
+
+	ret = sdw_enable_stream(sdw_stream);
+	if (ret)
+		dev_err(dai->dev, "%s trigger failed: %d\n", __func__, ret);
+	return ret;
+}
+EXPORT_SYMBOL_NS(asoc_sdw_comp_amp_prepare, "SND_SOC_SDW_UTILS");
+
+int asoc_sdw_comp_amp_trigger(struct snd_pcm_substream *substream, int cmd, struct snd_soc_dai *dai)
+{
+	//struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct sdw_stream_runtime *sdw_stream;
+	//struct snd_soc_dai *dai;
+	int ret;
+
+	dev_dbg(dai->dev, "%s %s id %d", __func__, dai->name, dai->id);
+	dev_dbg(dai->dev, "%s substream stream %d cmd %d", __func__, substream->stream, cmd);
+
+	/* Find stream from first CPU DAI */
+	//dai = snd_soc_rtd_to_cpu(rtd, 0);
+
+	sdw_stream = snd_soc_dai_get_stream(dai, substream->stream);
+	if (IS_ERR(sdw_stream)) {
+		dev_err(dai->dev, "%s no stream found for DAI %s\n", __func__, dai->name);
+		return PTR_ERR(sdw_stream);
+	}
+
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+	case SNDRV_PCM_TRIGGER_RESUME:
+		ret = sdw_enable_stream(sdw_stream);
+		break;
+
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_STOP:
+		ret = sdw_disable_stream(sdw_stream);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	if (ret)
+		dev_err(dai->dev, "%s trigger %d failed: %d\n", __func__, cmd, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL_NS(asoc_sdw_comp_amp_trigger, "SND_SOC_SDW_UTILS");
+
+int asoc_sdw_comp_amp_hw_free(struct snd_pcm_substream *substream,
+				struct snd_soc_dai *dai)
+{
+	//struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct sdw_slave *slave = dev_to_sdw_dev(dai->dev);
+	struct sdw_stream_runtime *sdw_stream =
+		snd_soc_dai_get_dma_data(dai, substream);
+	int ret;
+	//struct sdw_stream_runtime *sdw_stream;
+	//struct snd_soc_dai *dai;
+
+	dev_dbg(dai->dev, "%s %s id %d", __func__, dai->name, dai->id);
+	dev_dbg(dai->dev, "%s substream stream %d", __func__, substream->stream);
+
+	if (sdw_stream)
+		sdw_stream_remove_slave(slave, sdw_stream);
+
+	/* Find stream from first CPU DAI */
+	//dai = snd_soc_rtd_to_cpu(rtd, 0);
+
+	sdw_stream = snd_soc_dai_get_stream(dai, substream->stream);
+	//sdw_stream = snd_soc_dai_get_dma_data(dai, substream);
+	if (IS_ERR(sdw_stream)) {
+		dev_err(dai->dev, "%s no stream found for DAI %s\n", __func__, dai->name);
+		return PTR_ERR(sdw_stream);
+	}
+
+	ret = sdw_disable_stream(sdw_stream);
+	if (ret)
+		dev_err(dai->dev, "%s trigger (disable stream) failed: %d\n", __func__, ret);
+
+	ret = sdw_deprepare_stream(sdw_stream);
+	if (ret)
+		dev_err(dai->dev, "%s deprepare failed: %d\n", __func__, ret);
+
+	ret = sdw_stream_remove_master(slave->bus, sdw_stream);
+	if (ret < 0) {
+		dev_err(dai->dev, "remove master from stream %s failed: %d\n",
+			sdw_stream->name, ret);
+		return ret;
+	}
+
+	printk("%s, id %d done\n", __func__, dai->id);
+
+	return ret;
+}
+EXPORT_SYMBOL_NS(asoc_sdw_comp_amp_hw_free, "SND_SOC_SDW_UTILS");
 
 static bool asoc_sdw_is_unique_device(const struct snd_soc_acpi_link_adr *adr_link,
 				      unsigned int sdw_version,
