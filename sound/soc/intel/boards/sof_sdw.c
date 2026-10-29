@@ -1227,83 +1227,11 @@ static int create_bt_dailinks(struct snd_soc_card *card,
 
 static const struct snd_soc_pcm_stream asoc_sdw_bridge_params = {
 	.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |
-		   SNDRV_PCM_FMTBIT_S24_LE,
+		   SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE,
 	.rate_min = 48000,
 	.rate_max = 48000,
 	.channels_min = 2,
 	.channels_max = 2,
-};
-
-static int asoc_sdw_companion_amp_init(struct snd_soc_pcm_runtime *rtd)
-{
-	struct snd_soc_card *card = rtd->card;
-	struct device *dev = card->dev;
-
-	dev_err(dev, "bard: Companion Amp init called\n");
-	return 0;
-}
-
-static int asoc_sdw_companion_amp_startup(struct snd_pcm_substream *substream)
-{
-	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
-	struct device *dev = rtd->card->dev;
-
-	dev_err(dev, "bard: Companion Amp startup called\n");
-	return 0;
-}
-
-static void asoc_sdw_companion_amp_shutdown(struct snd_pcm_substream *substream)
-{
-	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
-	struct device *dev = rtd->card->dev;
-
-	dev_err(dev, "bard: Companion Amp shutdown called\n");
-}
-
-static int asoc_sdw_companion_amp_hw_params(struct snd_pcm_substream *substream,
-					    struct snd_pcm_hw_params *params)
-{
-	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
-	struct device *dev = rtd->card->dev;
-
-	dev_err(dev, "bard: Companion Amp hw_params called\n");
-	return 0;
-}
-
-static int asoc_sdw_companion_amp_hw_free(struct snd_pcm_substream *substream)
-{
-	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
-	struct device *dev = rtd->card->dev;
-
-	dev_err(dev, "bard: Companion Amp hw_free called\n");
-	return 0;
-}
-
-static int asoc_sdw_companion_amp_prepare(struct snd_pcm_substream *substream)
-{
-	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
-	struct device *dev = rtd->card->dev;
-
-	dev_err(dev, "bard: Companion Amp prepare called\n");
-	return 0;
-}
-
-static int asoc_sdw_companion_amp_trigger(struct snd_pcm_substream *substream, int cmd)
-{
-	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
-	struct device *dev = rtd->card->dev;
-
-	dev_err(dev, "bard: Companion Amp trigger called, cmd=%d\n", cmd);
-	return 0;
-}
-
-static const struct snd_soc_ops asoc_sdw_companion_amp_ops = {
-	.startup = asoc_sdw_companion_amp_startup,
-	.shutdown = asoc_sdw_companion_amp_shutdown,
-	.hw_params = asoc_sdw_companion_amp_hw_params,
-	.hw_free = asoc_sdw_companion_amp_hw_free,
-	.prepare = asoc_sdw_companion_amp_prepare,
-	.trigger = asoc_sdw_companion_amp_trigger,
 };
 
 static const struct snd_soc_dai_link bridge_dai_template = {
@@ -1311,8 +1239,6 @@ static const struct snd_soc_dai_link bridge_dai_template = {
 	.stream_name = "Companion Amp",
 	.c2c_params = &asoc_sdw_bridge_params,
 	.num_c2c_params = 1,
-	.init = asoc_sdw_companion_amp_init,
-	.ops = &asoc_sdw_companion_amp_ops,
 };
 
 static int create_sdw_comp_dailinks(struct snd_soc_card *card,
@@ -1327,6 +1253,8 @@ static int create_sdw_comp_dailinks(struct snd_soc_card *card,
 	struct snd_soc_dai_link_component *cpus;
 	int num_codecs;
 	int i;
+
+	printk("%s, %d: comp_ends_num=%d\n", __func__, __LINE__, comp_ends_num);
 
 	for (i = 0; i < comp_ends_num; i++) {
 		num_codecs = 0;
@@ -1348,11 +1276,17 @@ static int create_sdw_comp_dailinks(struct snd_soc_card *card,
 		cpus[0].name = comp_ends[i].main_amp->codec_name;
 		cpus[0].dai_name = comp_ends[i].main_amp->dai_info->dai_name;
 
+		printk("%s, %d: main_amp codec_name=%s, dai_name=%s\n", __func__, __LINE__,
+		       cpus[0].name, cpus[0].dai_name);
+
 		num_codecs = 0;
 		list_for_each_entry(end, &comp_ends[i].comp_ends, list) {
 			codecs[num_codecs].name = end->codec_name;
 			codecs[num_codecs].dai_name = end->dai_info->dai_name;
 			num_codecs++;
+
+			printk("%s, %d: comp_amp codec_name=%s, dai_name=%s\n", __func__, __LINE__,
+			       codecs[num_codecs - 1].name, codecs[num_codecs - 1].dai_name);
 		}
 
 		**dai_links = bridge_dai_template;
